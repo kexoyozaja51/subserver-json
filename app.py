@@ -1,3 +1,4 @@
+import json
 import traceback
 import base64
 from urllib.parse import parse_qs, unquote, urlparse
@@ -12,43 +13,12 @@ dotenv.load_dotenv()
 
 app = FastAPI()
 
-
-def convert_http2_to_naive(line: str) -> str:
-    if not line.startswith("http2://"):
-        return line
-
-    try:
-        parsed = urlparse(line)
-
-        encoded = parsed.netloc
-        decoded = base64.b64decode(
-            encoded + "=" * (-len(encoded) % 4)
-        ).decode()
-
-        params = parse_qs(parsed.query)
-        peer = params.get("peer", [""])[0]
-        fragment = unquote(parsed.fragment)
-
-        result = f"naive+https://{decoded}"
-
-        result += "?uot=1&security=tls"
-
-        if peer:
-            result += f"&sni={peer}"
-
-        if fragment:
-            result += f"#{fragment}"
-
-        return result
-
-    except Exception:
-        return line
-
-
 @app.get("/{path:path}")
 async def subscription(path: str, response: Response):
     # 1. get sub_id
     sub_path = os.getenv("SUB_PATH")
+    if sub_path is None:
+        return []
     if sub_path.startswith("/"):
         sub_path = sub_path[1:]
 
@@ -67,7 +37,7 @@ async def subscription(path: str, response: Response):
     # 3. retrieve configs
     upload = 0
     download = 0
-    subs_configs = []
+    subs_jsons = []
 
     for sub_url in subs_urls:
         try:
@@ -86,7 +56,10 @@ async def subscription(path: str, response: Response):
                 if i.strip().startswith("download"):
                     download += int(i.split("=")[1])
 
-            for line in response.text.splitlines():
+            sub_json = json.loads(response.text)
+            subs_jsons.extend(sub_json)
+
+            """for line in response.text.splitlines():
                 line = line.strip()
 
                 if line.startswith("naive+https://"):
@@ -97,20 +70,20 @@ async def subscription(path: str, response: Response):
 
                 name = os.getenv(f"subid_{sub_id}_suffix", "")
                 line = f"{line}{name}" if name else line
-                subs_configs.append(line)
+                subs_configs.append(line)"""
         except:
             traceback.print_exc()
 
     return Response(
-        content="\n".join(subs_configs),
+        content=json.dumps(subs_jsons),
         media_type="text/plain",
         headers={
             "Profile-Title": f"base64:{base64.b64encode(os.getenv("SUB_NAME").encode()).decode()}",
             "Announce": f"base64:{base64.b64encode(os.getenv("SUB_DESC").encode()).decode()}",
-            "Support-Url": os.getenv("SUB_SUPPORT_URL"),
-            "Profile-Web-Page-Url": os.getenv("SUB_PAGE_URL"),
+            "Support-Url": os.getenv("SUB_SUPPORT_URL") or "",
+            "Profile-Web-Page-Url": os.getenv("SUB_PAGE_URL") or "",
             "Profile-Update-Interval": "1",
-            "Subscription-Userinfo": (f"upload={upload}; download={download}; total=0; expire=0")
+            "Subscription-Userinfo": f"upload={upload}; download={download}; total=0; expire=0"
         }
     )
 
