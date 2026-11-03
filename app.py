@@ -78,6 +78,7 @@ async def subscription(path: str, response: Response):
         content=json.dumps(subs_jsons),
         media_type="text/plain",
         headers={
+            "X-Robots-Tag": "noindex, nofollow",
             "Profile-Title": f"base64:{base64.b64encode(os.getenv("SUB_NAME").encode()).decode()}",
             "Announce": f"base64:{base64.b64encode(os.getenv("SUB_DESC").encode()).decode()}",
             "Support-Url": os.getenv("SUB_SUPPORT_URL") or "",
